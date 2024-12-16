@@ -15,27 +15,15 @@ if "conversation_state" not in st.session_state:
 
 def get_history(
     previous_summarized_history,
-    previous_conversation_state,
     last_user_message,
     last_assistant_message,
 ):
     prompt = f"""
-You are a conversation history summarizer with state awareness. Your task is to maintain both an ongoing summary of the conversation and track the current conversational context.
+You are a conversation history summarizer. Your task is to maintain an ongoing summary that captures both content and context.
 
 Current Summary: {previous_summarized_history}
-Current State: {previous_conversation_state}
-New Message: {last_user_message}
-Response: {last_assistant_message}
-
-STATE TRACKING GUIDELINES:
-1. Monitor for any contextual shifts in the conversation that change how future messages should be interpreted
-2. State changes can include but are not limited to:
-   - Changes in conversation purpose or direction
-   - New constraints or requirements
-   - Context switches
-   - Special handling requests
-3. Maintain current state until a clear contextual shift occurs
-4. State should inform how new information is processed and summarized
+last user message: {last_user_message}
+last assistant response: {last_assistant_message}
 
 SUMMARY GUIDELINES:
 1. If this is the first message (current_summary is empty), create an initial summary
@@ -43,13 +31,13 @@ SUMMARY GUIDELINES:
    - Preserving essential context from previous messages
    - Removing redundant information
    - Maintaining chronological flow
-   - Keeping focus on actionable items and key decisions
+   - Tracking shifts in conversation purpose or direction
 3. Include:
-   - Current conversational state/context
-   - Main topics discussed
-   - Decisions made
+   - Main topics and their progression
+   - Key decisions and their rationale
+   - Current direction or focus
+   - Important constraints or special handling requirements
    - Action items or next steps
-   - Important context shifts
 4. Exclude:
    - Pleasantries and small talk
    - Redundant information
@@ -57,11 +45,7 @@ SUMMARY GUIDELINES:
 5. Format the summary in past tense
 6. Keep the summary concise (maximum 200 words)
 
-Output Format:
-{{
-    "summarized_history": string,
-    "conversation_state": string
-}}
+Updated Summary:
 """
 
     response = client.chat.completions.create(
@@ -71,14 +55,7 @@ Output Format:
         ],
     )
     response = response.choices[0].message.content
-    if response is None:
-        raise Exception("OpenAI API response is None")
-
-    # decode json
-    response = json.loads(response)
-    _summarized_history = response["summarized_history"]
-    _conversation_state = response["conversation_state"]
-    return _summarized_history, _conversation_state
+    return response
 
 
 if "openai_model" not in st.session_state:
@@ -106,9 +83,6 @@ if prompt := st.chat_input("What is up?"):
         llmPrompt = f"""
 We are in a middle of a conversation.
 
-[Conversation State]
-{st.session_state.conversation_state}
-
 [Summarized History]
 {st.session_state.summarized_history}
 
@@ -133,21 +107,15 @@ We are in a middle of a conversation.
         response = st.write_stream(stream)
 
     st.session_state.messages.append({"role": "assistant", "content": response})
-    st.session_state.summarized_history, st.session_state.conversation_state = (
-        get_history(
-            st.session_state.summarized_history,
-            st.session_state.conversation_state,
-            prompt,
-            response,
-        )
+    st.session_state.summarized_history = get_history(
+        st.session_state.summarized_history,
+        prompt,
+        response,
     )
 
 st.markdown(
     f"""
             **Summary**
             {st.session_state.summarized_history}
-
-            **Conversation State**
-            {st.session_state.conversation_state}
             """
 )
